@@ -61,7 +61,8 @@ SOURCES = {
     "小鹏":   {"url": "https://www.xiaopeng.com/finance.html", "js": False,
                "anchors": ["年费率", "0息", "首付"]},
     "特斯拉": {"url": "https://www.tesla.cn/financing-calculator", "js": True,
-               "anchors": ["优惠政策", "金融产品"]},
+               "anchors": ["贷款方案", "适用金融机构"],
+               "api": "https://www.tesla.cn/fs-gateway/financialProducts/products?productLine=AUTO&context=DEFAULT"},
     "理想":   {"url": "https://www.lixiang.com/help/loaninstruction.html", "js": False,
                "anchors": ["5免", "随心还", "年费率"]},
     "蔚来":   {"url": "https://www.nio.cn/news", "js": False,
@@ -690,19 +691,34 @@ def crawl_brand(name, cfg, verbose=False):
         log(f"  [静态失败] {name} {err}", verbose)
         js = True
 
+    # JSON 接口兜底（特斯拉计算器 SPA 数据走 fs-gateway）：浏览器超时/空壳时直接取产品接口
+    if cfg.get("api") and not (text and any(a in text for a in cfg["anchors"])):
+        try:
+            api_text = fetch_static(cfg["api"], timeout=20)
+            if any(a in api_text for a in cfg["anchors"]):
+                text = api_text
+                method = "requests-api"
+                js = False
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}"
+            log(f"  [接口失败] {name} {err}", verbose)
+
     if js:
         try:
             if name == "极氪" and cfg.get("models"):
                 text = fetch_js(url, wait_ms=5000, script=zeekr_script)
             else:
-                text = fetch_js(url, wait_ms=9000)
+                try:
+                    text = fetch_js(url, wait_ms=9000)
+                except Exception:
+                    text = fetch_js(url, wait_ms=9000)   # 浏览器启动/加载超时重试一次
             method = "headless"
         except Exception as e:
             err = f"{type(e).__name__}: {e}"
             log(f"  [浏览器失败] {name} {err}", verbose)
             text = text or ""
     else:
-        method = "requests"
+        method = method or "requests"
 
     text = clean_text(text or "")
     ok = bool(text) and any(a in text for a in cfg["anchors"])
