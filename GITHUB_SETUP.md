@@ -34,9 +34,3 @@ git push
 ```
 
 首次在新机器推送时，用浏览器授权或 PAT（勾选 `repo`、`workflow` 权限）完成认证。
-
-## 备忘：免费版私有仓库不开 Pages
-
-GitHub 免费版私有仓库不支持 Pages（API 422：plan does not support Pages）。
-本仓库已转公开所以可用；若以后转回私有，Pages 会失效，需转公开、升级 Pro
-或另配静态托管（Vercel / Netlify / 自己的 OSS 静态站）。
