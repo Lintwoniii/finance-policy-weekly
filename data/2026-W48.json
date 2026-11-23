@@ -79,24 +79,9 @@
      "change": {
       "items": [
        {
-        "kind": "change",
+        "kind": "none",
         "since": "",
-        "text": "新增 Model3 方案"
-       },
-       {
-        "kind": "change",
-        "since": "",
-        "text": "新增 Y 方案"
-       },
-       {
-        "kind": "change",
-        "since": "",
-        "text": "新增 YL 方案"
-       },
-       {
-        "kind": "change",
-        "since": "",
-        "text": "费率更新 0%（限时5年0息） → 2.50%"
+        "text": ""
        }
       ]
      },
@@ -141,24 +126,9 @@
      "change": {
       "items": [
        {
-        "kind": "change",
+        "kind": "none",
         "since": "",
-        "text": "新增 MEGA 方案"
-       },
-       {
-        "kind": "change",
-        "since": "",
-        "text": "新增 i6 方案"
-       },
-       {
-        "kind": "change",
-        "since": "",
-        "text": "新增 i9 方案"
-       },
-       {
-        "kind": "change",
-        "since": "",
-        "text": "合作机构更新"
+        "text": ""
        }
       ]
      },
