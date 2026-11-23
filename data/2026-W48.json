@@ -2,7 +2,7 @@
  "week": "11月第四周（11.23–11.29）",
  "updated": "11.23",
  "judge_window": "11.23–11.29",
- "checked_at_all": "2026-11-23 21:26 抓取",
+ "checked_at_all": "2026-11-23 22:18 抓取",
  "sections": [
   {
    "brand": "小鹏",
@@ -38,7 +38,7 @@
    "verified": {
     "status": "checked",
     "url": "https://www.xiaopeng.com/finance.html",
-    "checked_at": "2026-11-23 21:21",
+    "checked_at": "2026-11-23 18:51",
     "note": "小鹏 官网实抓（requests），方案行数 29",
     "gap": ""
    },
@@ -87,21 +87,23 @@
      },
      "subsidy": "有",
      "policy": [
-      "Model3/Y/YL：3.99-5.99万首付 5年0息",
-      "Model3/Y/YL：3.99-5.99万首付 3.99万尾款「特从容」5年0息"
+      "Model3/Y/YL：12-60期0息，Model3/Y首付3.99万、YL首付5.99万",
+      "Model3/Y/YL：60期0息，Model3/Y首付3.99万、尾款3.99万、YL首付5.99万、尾款3.99万（弹性贷款）"
      ]
     }
    ],
    "verified": {
     "status": "checked",
     "url": "https://www.tesla.cn/financing-calculator",
-    "checked_at": "2026-11-23 21:21",
-    "note": "特斯拉 官网实抓（requests-api），方案行数 6",
+    "checked_at": "2026-11-23 22:18",
+    "note": "特斯拉 官网实抓（requests-api），方案行数 2；接口共 17 个产品，银行 0 息贷款/弹性贷款已列入政策行；另有标准贷款/弹性贷款（年化利率 4.58%-5.19%）、0息回租 4 个、低息回租/直租 6 个（厦门天下达融资租赁股份有限公司、易鑫集团）未列入政策行；年化费率接口未返回，沿用官网计算器口径",
     "gap": ""
    },
    "fingerprint": {
     "特斯拉": [
-     "期数5"
+     "60期0息",
+     "首付3.99万",
+     "首付5.99万"
     ]
    }
   },
@@ -139,7 +141,7 @@
    "verified": {
     "status": "checked",
     "url": "https://www.lixiang.com/help/loaninstruction.html",
-    "checked_at": "2026-11-23 21:21",
+    "checked_at": "2026-11-23 18:51",
     "note": "理想 官网实抓（requests），方案行数 22",
     "gap": ""
    },
@@ -236,9 +238,9 @@
    "verified": {
     "status": "partial",
     "url": "https://www.nio.cn/news",
-    "checked_at": "2026-11-23 21:21",
-    "note": "蔚来 本轮未取到（已尝试 https://www.nio.cn/news）：页面无方案锚点（正文未渲染出费率/首付文案），沿用上期值；乐道 本轮未取到（已尝试 https://finance.onvo.cn/）：页面无方案锚点（正文未渲染出费率/首付文案），沿用上期值",
-    "gap": "页面无方案锚点（正文未渲染出费率/首付文案）；页面无方案锚点（正文未渲染出费率/首付文案）"
+    "checked_at": "2026-11-23 18:51",
+    "note": "蔚来 本轮未取到（已尝试 https://www.nio.cn/news）：官网命中 JavaScript Bot 校验页（EO_Bot_Ssid 挑战脚本，静态仅 985 字节，headless 渲染后正文也无方案锚点），沿用上期值，沿用上期值；乐道 本轮未取到（已尝试 https://finance.onvo.cn/）：页面无方案锚点（正文未渲染出费率/首付文案），沿用上期值",
+    "gap": "官网命中 JavaScript Bot 校验页（EO_Bot_Ssid 挑战脚本，静态仅 985 字节，headless 渲染后正文也无方案锚点），沿用上期值；页面无方案锚点（正文未渲染出费率/首付文案）"
    },
    "fingerprint": {
     "蔚来": []
@@ -307,7 +309,7 @@
    "verified": {
     "status": "checked",
     "url": "https://www.zeekrlife.com/finance/FinancialCalculator",
-    "checked_at": "2026-11-23 21:21",
+    "checked_at": "2026-11-23 19:15",
     "note": "极氪 官网实抓（requests-api），方案行数 31；直连官方金融接口逐车系核限时特惠/常规分期/尾款产品；7X 接口无在期方案；机构名单接口仅返回占位，以官网计算器为准",
     "gap": ""
    },
@@ -350,7 +352,7 @@
      "change": {
       "items": [
        {
-        "kind": "fail",
+        "kind": "none",
         "since": "",
         "text": ""
        }
@@ -373,17 +375,19 @@
     }
    ],
    "verified": {
-    "status": "partial",
+    "status": "checked",
     "url": "https://www.xiaomiev.com/finance",
-    "checked_at": "2026-11-23 21:21",
-    "note": "小米 本轮未取到（已尝试 https://www.xiaomiev.com/finance）：TimeoutError: Page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"https://www.xiaomiev.com/finance\", waiting until \"domcontentloaded\"\n，沿用上期值",
-    "gap": "TimeoutError: Page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"https://www.xiaomiev.com/finance\", waiting until \"domcontentloaded\"\n"
+    "checked_at": "2026-11-23 18:51",
+    "note": "小米 官网实抓（headless），方案行数 27",
+    "gap": ""
    },
    "fingerprint": {
     "小米": [
-     "比例15%",
      "费率1.99%",
+     "费率15%",
+     "费率19%",
      "费率2.5%",
+     "费率85%",
      "首付4.99万"
     ]
    },
@@ -535,22 +539,22 @@
    "verified": {
     "status": "checked",
     "url": "https://hima.auto/financing-calculator/loaninstruction/",
-    "checked_at": "2026-11-23 21:21",
+    "checked_at": "2026-11-23 18:51",
     "note": "鸿蒙智行 官网实抓（requests），方案行数 28",
     "gap": ""
    },
    "fingerprint": {
     "鸿蒙智行": [
-     "比例20%",
-     "比例30%",
-     "比例40%",
-     "比例50%",
      "费率0%",
      "费率1.79%",
      "费率1.99%",
      "费率2.49%",
      "费率2.99%",
+     "费率20%",
      "费率3%",
+     "费率30%",
+     "费率40%",
+     "费率50%",
      "费率6.51%",
      "首付4.99万",
      "首付6.98万",
@@ -622,14 +626,14 @@
    "verified": {
     "status": "checked",
     "url": "https://www.byd.com/cn/ocean-home/models/haibao/haibao-07-EV",
-    "checked_at": "2026-11-23 21:21",
+    "checked_at": "2026-11-23 18:51",
     "note": "比亚迪 官网实抓（headless），方案行数 13，活动期起始 11.1；已核 海豹07EV（海洋网）、元UP（王朝网 yuan-up 页）在期；腾势 官网实抓（requests），方案行数 2；已核 N9、Z9GT、Z9S、N8、N8L（闪充版/纯电版）、D9 在期（D9 路径更正为 D9-2.html）",
     "gap": ""
    },
    "fingerprint": {
     "比亚迪": [
      "24期0息",
-     "比例50%",
+     "费率50%",
      "费率7.95%"
     ],
     "腾势": [
@@ -693,13 +697,16 @@
    "verified": {
     "status": "checked",
     "url": "https://www.leapmotor.cn/A10.html",
-    "checked_at": "2026-11-23 21:21",
+    "checked_at": "2026-11-23 18:51",
     "note": "零跑 官网实抓（headless），方案行数 8；仅核 A10 车型页，其他车型未逐一取到",
     "gap": ""
    },
    "fingerprint": {
     "零跑": [
-     "期数2"
+     "期数2",
+     "费率100%",
+     "费率88.1%",
+     "费率99.9%"
     ]
    },
    "models_seen": [
@@ -718,10 +725,10 @@
    ]
   }
  ],
- "digest_lead": "2026-11-23 21:26 独立抓取：0 个来源，金融数值无变化，仅更新时间戳",
+ "digest_lead": "2026-11-23 22:18 独立抓取：1 个来源，金融数值无变化，仅更新时间戳",
  "stats": {
-  "checked": 7,
-  "partial": 2,
+  "checked": 8,
+  "partial": 1,
   "pending": 0
  }
 }

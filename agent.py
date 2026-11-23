@@ -24,6 +24,7 @@ import argparse
 import json
 import re
 import sys
+import requests
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -917,11 +918,155 @@ def week_diff(prev_row, row):
 
 
 
+# ------------------------------------------------------- 特斯拉直连 fs-gateway
+TESLA_PRODUCTS_URL = "https://www.tesla.cn/fs-gateway/financialProducts/products?productLine=AUTO"
+TESLA_VEHICLE_URL = ("https://www.tesla.cn/fs-gateway/vehicleSelection/financial-services/"
+                     "vehicle-selection/v2")
+TESLA_HEADERS = {"User-Agent": UA, "Referer": "https://www.tesla.cn/financing-calculator"}
+
+
+def _tesla_trim_map():
+    r = requests.get(TESLA_VEHICLE_URL, headers=TESLA_HEADERS, timeout=20)
+    r.raise_for_status()
+    j = r.json()
+    trim_model, model_name, trim_name = {}, {}, {}
+    for it in j.get("vehicleSelectionConfig", {}).get("modelSelectionItems", []):
+        model_name[it["modelCode"]] = it["displayName"]
+        for t in it.get("trims", []):
+            trim_model[t["trimCode"]] = it["modelCode"]
+            trim_name[t["trimCode"]] = t["displayName"]
+    return trim_model, model_name, trim_name
+
+
+def _tesla_active_models(product, trim_model, model_name, trim_name):
+    """产品 → 在产配置分组：{modelCode: [trimCode]}；停产配置不计入。"""
+    out = {}
+    for mm in product.get("modelCodeTrimMappings", []):
+        active = [c for c in mm.get("trimCodes", []) if c in trim_model]
+        if active:
+            out.setdefault(mm["modelCode"], []).extend(active)
+    return out
+
+
+def _tesla_labels(active, model_name, trim_name):
+    """分组配置 → 车系展示名（Model Y 内把 Model Y L 单列）。"""
+    labels = []
+    for mc, codes in active.items():
+        names = [trim_name.get(c, c) for c in codes]
+        if mc == "MDLY":
+            yl = [n for n in names if n.startswith("Model Y L")]
+            if len(yl) < len(names):
+                labels.append("Model Y")
+            if yl:
+                labels.append("Model Y L")
+        else:
+            labels.append(model_name.get(mc, mc))
+    order = ["Model 3", "Model Y", "Model Y L", "Model S", "Model X"]
+    return [x for x in order if x in labels] + [x for x in labels if x not in order]
+
+
+def _tesla_down_txt(plan):
+    down, unit = plan.get("minimumDownPayment"), plan.get("minimumDownPaymentUnit")
+    if down is None:
+        return ""
+    if unit == "C":
+        return f"{down/10000:g}万"
+    if unit == "P":
+        return f"{down*100:g}%首付"
+    return str(down)
+
+
+def _tesla_organizers(desc):
+    return re.sub(r"^适用金融机构：", "", (desc or "").strip())
+
+
+def tesla_crawl_api():
+    """直连特斯拉 fs-gateway，返回 (政策行列表, 摘要)；失败抛异常。"""
+    trim_model, model_name, trim_name = _tesla_trim_map()
+    r = requests.get(TESLA_PRODUCTS_URL, headers=TESLA_HEADERS, timeout=20)
+    r.raise_for_status()
+    products = r.json().get("products", [])
+
+    loan0, balloon0, lease, standard = [], [], [], []
+    for pr in products:
+        plans = pr.get("plans") or []
+        if not plans:
+            continue
+        rates = [pl.get("interestRate") for pl in plans]
+        active = _tesla_active_models(pr, trim_model, model_name, trim_name)
+        rec = {"name": pr.get("productName"), "sub": pr.get("productSubType"),
+               "ptype": pr.get("productType"), "active": active,
+               "labels": _tesla_labels(active, model_name, trim_name),
+               "orgs": _tesla_organizers(pr.get("productDescription")),
+               "plans": plans, "rates": rates}
+        zero = all(x == 0 for x in rates)
+        if rec["ptype"] == "AUTO_LOAN" and rec["sub"] == "LOAN" and zero:
+            loan0.append(rec)
+        elif rec["ptype"] == "AUTO_LOAN" and rec["sub"] == "BALLOON_LOAN" and zero:
+            balloon0.append(rec)
+        elif rec["ptype"] == "AUTO_LEASE":
+            lease.append(rec)
+        else:
+            standard.append(rec)
+
+    COMPACT = {"Model 3": "Model3", "Model Y": "Y", "Model Y L": "YL",
+               "Model S": "ModelS", "Model X": "ModelX"}
+    ORDER = ["Model 3", "Model Y", "Model Y L", "Model S", "Model X"]
+
+    def compact(labels):
+        return [COMPACT.get(x, x) for x in sorted(labels, key=lambda x: ORDER.index(x) if x in ORDER else 9)]
+
+    def down_groups(recs):
+        groups, terms = {}, set()
+        for rec in recs:
+            for pl in rec["plans"]:
+                terms.add(pl.get("term"))
+                groups.setdefault(_tesla_down_txt(pl), set()).update(rec["labels"])
+        return groups, sorted(t for t in terms if t)
+
+    def term_txt(terms):
+        if terms == [12, 24, 36, 48, 60]:
+            return "12-60期"
+        return "/".join(f"{t}期" for t in terms)
+
+    lines = []
+    loan_groups, loan_terms = down_groups(loan0)
+    if loan_groups:
+        head = "/".join(compact(set().union(*loan_groups.values())))
+        body = "、".join(f"{'/'.join(compact(labels))}首付{down}"
+                         for down, labels in sorted(loan_groups.items()))
+        lines.append(f"{head}：{term_txt(loan_terms)}0息，{body}")
+
+    bal_groups, bal_terms = down_groups(balloon0)
+    if bal_groups:
+        residual = next((pl.get("residualPayment") for rec in balloon0 for pl in rec["plans"]
+                         if pl.get("residualPayment")), None)
+        res_txt = f"、尾款{residual/10000:g}万" if residual else ""
+        head = "/".join(compact(set().union(*bal_groups.values())))
+        body = "、".join(f"{'/'.join(compact(labels))}首付{down}{res_txt}"
+                         for down, labels in sorted(bal_groups.items()))
+        lines.append(f"{head}：{term_txt(bal_terms)}0息，{body}（弹性贷款）")
+
+    std_rates = [x for rec in standard for x in rec["rates"] if x]
+    bank_std = [x for rec in standard if rec["ptype"] == "AUTO_LOAN" for x in rec["rates"] if x]
+    lease_zero = [rec for rec in lease if all(x == 0 for x in rec["rates"])]
+    lease_low = [rec for rec in lease if not all(x == 0 for x in rec["rates"])]
+    summary = {
+        "products": len(products),
+        "standard_rate": (f"{min(std_rates)*100:.2f}%-{max(std_rates)*100:.2f}%" if std_rates else ""),
+        "bank_std_rate": (f"{min(bank_std)*100:.2f}%-{max(bank_std)*100:.2f}%" if bank_std else ""),
+        "lease_zero": len(lease_zero), "lease_low": len(lease_low),
+        "lease_orgs": sorted({rec["orgs"] for rec in lease if rec["orgs"]}),
+        "bank_orgs": sorted({rec["orgs"] for rec in loan0 if rec["orgs"]}),
+    }
+    return lines, summary
+
+
 # ---------------------------------------------------------------- 抓取调度
 def crawl_brand(name, cfg, verbose=False):
     url = cfg["url"]
     js = cfg.get("js", False)
-    text, method, err, zeekr = None, "", "", None
+    text, method, err, zeekr, tesla = None, "", "", None, None
     # 极氪：优先直连官方金融接口（签名四接口链），失败再退回静态/headless
     if name == "极氪":
         try:
@@ -933,6 +1078,18 @@ def crawl_brand(name, cfg, verbose=False):
         except Exception as e:
             err = f"{type(e).__name__}: {e}"
             log(f"  [极氪接口失败] {err}", verbose)
+    # 特斯拉：直连 fs-gateway 产品接口，按在产配置分组解析
+    if name == "特斯拉":
+        try:
+            tlines, tsum = tesla_crawl_api()
+            if tlines:
+                tesla = {"lines": tlines, "summary": tsum}
+                text = "\n".join(tlines) + "\n适用金融机构：" + "、".join(tsum["bank_orgs"])
+                method, js = "requests-api", False
+                log(f"  [特斯拉接口] 产品 {tsum['products']} 个，政策行 {len(tlines)}", verbose)
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}"
+            log(f"  [特斯拉接口失败] {err}", verbose)
     if text is None:
         try:
             raw = fetch_static(url)
@@ -995,7 +1152,7 @@ def crawl_brand(name, cfg, verbose=False):
             probes.append({"url": pu, "ok": False, "reason": reason})
 
     return {"text": text, "method": method, "ok": ok, "url": url, "err": err,
-            "probes": probes, "zeekr": zeekr}
+            "probes": probes, "zeekr": zeekr, "tesla": tesla}
 
 
 # ---------------------------------------------------------------- 主流程
@@ -1070,6 +1227,11 @@ def main():
             r0["policy"] = z["lines"]
             if z["summary"]["rates"]:
                 r0["rates"] = z["summary"]["rates"]
+
+        # 特斯拉直连接口成功：用接口解析行替换政策行
+        if res.get("tesla"):
+            r0 = sec["rows"][0]
+            r0["policy"] = res["tesla"]["lines"]
 
         # 正文过薄（Bot 校验页/空壳页）不算取到
         anchors_hit = [a for a in (cfg.get("anchors") or []) if a in (res.get("text") or "")]
@@ -1194,6 +1356,12 @@ def main():
             note += f"；官网新车型已补行：{'、'.join(res['_added'])}"
         if res.get("_nop"):
             note += f"；官网已列车型但方案页无文本：{'、'.join(res['_nop'])}"
+        if res.get("tesla"):
+            ts = res["tesla"]["summary"]
+            note += (f"；接口共 {ts['products']} 个产品，银行 0 息贷款/弹性贷款已列入政策行；"
+                     f"另有标准贷款/弹性贷款（年化利率 {ts['bank_std_rate']}）、"
+                     f"0息回租 {ts['lease_zero']} 个、低息回租/直租 {ts['lease_low']} 个"
+                     f"（{'、'.join(ts['lease_orgs'])}）未列入政策行；年化费率接口未返回，沿用官网计算器口径")
 
         res_map[name] = {
             "status": status, "url": cfg["url"], "method": res["method"],
