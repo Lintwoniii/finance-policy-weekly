@@ -22,7 +22,7 @@ requirements.txt    Python 依赖
   2) 仓库 Settings → Pages → Source 选 “GitHub Actions”；
   3) Actions 里手动点一次 “友商金融政策周报” → Run workflow，确认能出表；
   4) 之后每天 09/12/16/18（北京时间）自动跑，产出发布到
-     https://<你的用户名>.github.io/<仓库名>/友商金融政策动态-周报表.html
+     https://<你的用户名>.github.io/<仓库名>/  （首页 index.html 即周报宽表）
   链接是你自己的，跟豆包账号无关；离职、换电脑都不影响。
 
 方式二：自己电脑（Windows）本地跑
