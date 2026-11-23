@@ -24,6 +24,8 @@ requirements.txt    Python 依赖
   4) 之后每天 09/12/16/18（北京时间）自动跑，产出发布到
      https://<你的用户名>.github.io/<仓库名>/  （首页 index.html 即周报宽表）
   链接是你自己的，跟豆包账号无关；离职、换电脑都不影响。
+  注意：GitHub 免费版私有仓库不支持 Pages，要公开网页链接需转公开仓库、
+  升级 Pro 或另配静态托管，详见 GITHUB_SETUP.md。
 
 方式二：自己电脑（Windows）本地跑
   1) 装 Python 3.10+（python.org，安装时勾 Add to PATH）；
