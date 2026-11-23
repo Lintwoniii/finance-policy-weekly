@@ -73,7 +73,7 @@ SOURCES = {
                "anchors": ["0息", "首付", "费率"]},
     "极氪":   {"url": "https://www.zeekrlife.com/finance/FinancialCalculator", "js": True,
                "anchors": ["限时特惠", "首付"], "models": False,
-               "scope": "仅核计算器默认车型 001 Max，其余 10 款沿用上期逐车型实抓值"},
+               "scope": "直连官方金融接口逐车系核限时特惠/常规分期/尾款产品；7X 接口无在期方案；机构名单接口仅返回占位，以官网计算器为准"},
     "小米":   {"url": "https://www.xiaomiev.com/finance", "js": False,
                "anchors": ["年化费率", "首付", "期"]},
     "鸿蒙智行": {"url": "https://hima.auto/financing-calculator/loaninstruction/", "js": False,
@@ -215,6 +215,251 @@ def zeekr_script(page):
     return "\n".join(out)
 
 
+# ------------------------------------------------------- 极氪直连官方金融接口
+# 接口链（与官网前端一致）：车型列表 → 版本列表 → 产品类型 → 支持机构/方案。
+# 签名：[MOLE, nonce, timestamp] 字典序拼接后 SHA1；头口径与线上 prod 前端对齐
+# （app_type=h5、platform=WEB_MOBILE，不带 app_code）。
+ZEEKR_MOLE = ("MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCz09z6e9WOcNq+nUMX8Vq1Xe2EmJxu"
+               "R3XbturefioF)E(Fl")
+ZEEKR_APP_ID = "ONEX97FB91F061405"
+ZEEKR_BASE = "https://api-gw-toc.zeekrlife.com/soa-trade-finance-client/v1"
+ZEEKR_NONCE_CHARS = "ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz1234567890"
+ZEEKR_TYPE_NAME = {1: "常规分期", 2: "尾款产品", 5: "直租方案", 6: "限时特惠"}
+
+
+def _zeekr_headers():
+    import hashlib
+    import random
+    import time
+    nonce = "".join(random.choice(ZEEKR_NONCE_CHARS) for _ in range(15))
+    ts = str(int(time.time() * 1000))
+    sign = hashlib.sha1("".join(sorted([ZEEKR_MOLE, nonce, ts])).encode()).hexdigest()
+    return {
+        "User-Agent": UA, "Content-Type": "application/json",
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://www.zeekrlife.com/",
+        "x_ca_key": "H5-SIGN-SECRET-KEY", "x_ca_nonce": nonce,
+        "x_ca_timestamp": ts, "x_ca_sign": sign,
+        "app_type": "h5", "platform": "WEB_MOBILE",
+        "WorkspaceId": "prod", "Version": "2",
+        "device_id": "".join(str(random.randint(0, 9)) for _ in range(20)),
+        "riskTimeStamp": ts, "AppId": ZEEKR_APP_ID,
+        f"X-CORS-{ZEEKR_APP_ID}-prod": "1",
+    }
+
+
+def _zeekr_call(session, method, path, body=None):
+    r = session.request(method, ZEEKR_BASE + path, json=body,
+                        headers=_zeekr_headers(), timeout=25)
+    r.raise_for_status()
+    j = r.json()
+    # 10086「未查询到产品」= 该车系/方案类型在接口侧无在期方案，按空数据处理，不算失败
+    if str(j.get("code")) not in ("000000", "10086"):
+        raise RuntimeError(j.get("msg") or "极氪接口返回异常")
+    return j.get("data") or []
+
+
+def _zeekr_short(name):
+    n = re.sub(r"^ZEEKR\s*", "", name or "").strip()
+    return n.replace("009 光辉系列", "009光辉")
+
+
+def _zeekr_g(pct):
+    """'2.99%' / 0.00 → '2.99' / '0' 数值字符串；空 → ''。"""
+    if pct in (None, ""):
+        return ""
+    try:
+        return f"{float(str(pct).rstrip('%')):g}"
+    except (TypeError, ValueError):
+        return ""
+
+
+def _zeekr_seg_label(tmin, tmax):
+    """分段期数转中文：1-24 → 前2年；25-60 → 后3年；37-60 → 后2年。"""
+    try:
+        lo, hi = int(float(tmin)), int(float(tmax))
+    except (TypeError, ValueError):
+        return ""
+    if lo <= 1:
+        return f"前{round(hi / 12)}年"
+    return f"后{round((hi - lo + 1) / 12)}年"
+
+
+def _zeekr_term_label(months):
+    try:
+        m = int(float(months))
+    except (TypeError, ValueError):
+        return ""
+    return "5年" if m == 60 else f"{m}期"
+
+
+def _zeekr_item(model, version, ptype, product, item):
+    cd = (item.get("clientData") or {}).get("normal") or {}
+    rates = []
+    for ri in item.get("itemRateResultList") or []:
+        segs = ri.get("termInfoList") or []
+        if segs:
+            for sg in segs:
+                rates.append({
+                    "tmin": sg.get("termMin"), "tmax": sg.get("termMax"),
+                    "fee": sg.get("discountAnnualizedRatePercent") or sg.get("annualizedRatePercent"),
+                    "interest": sg.get("discountAnnualizedInterestRatePercent")
+                                or sg.get("annualizedInterestRatePercent"),
+                })
+        else:
+            rates.append({
+                "tmin": None, "tmax": item.get("loanTerm"),
+                "fee": ri.get("discountAnnualizedRatePercent") or ri.get("annualizedRatePercent"),
+                "interest": ri.get("discountAnnualizedInterestRatePercent")
+                            or ri.get("annualizedInterestRatePercent"),
+            })
+    return {
+        "model": _zeekr_short(model.get("modelName")),
+        "version": version.get("versionName"),
+        "ptype": ptype, "pname": product.get("financeProductName"),
+        "tag": item.get("tagText") or "", "loanTerm": item.get("loanTerm"),
+        "downMin": cd.get("downPayRatioMin"), "downMax": cd.get("downPayRatioMax"),
+        "unpaidMin": cd.get("unpaidRatioMin"), "unpaidMax": cd.get("unpaidRatioMax"),
+        "rates": rates,
+    }
+
+
+def _zeekr_build_lines(records):
+    """按车系 × 方案类型聚合为周报政策行；返回 (lines, summary)。"""
+    by_model = {}
+    for rec in records:
+        by_model.setdefault(rec["model"], []).append(rec)
+
+    order = [_zeekr_short(x) for x in
+             ["ZEEKR 001", "ZEEKR X", "ZEEKR 001 FR", "ZEEKR 009 光辉系列", "ZEEKR MIX",
+              "ZEEKR 9X", "ZEEKR 8X", "ZEEKR 007GT", "ZEEKR 007", "ZEEKR 009", "ZEEKR 7X"]]
+    models = order + [m for m in by_model if m not in order]
+
+    lines, rates, models_with = [], set(), []
+    for model in models:
+        recs = by_model.get(model, [])
+        groups = {6: [], 1: [], 2: []}
+        for r in recs:
+            groups.setdefault(r["ptype"], []).append(r)
+        if not recs:
+            lines.append(f"{model}：金融接口未返回在期方案（限时特惠/常规分期/尾款产品均无记录）")
+            continue
+        models_with.append(model)
+
+        # —— 限时特惠（type 6）——
+        if groups[6]:
+            offers = []
+            seen = set()
+            for r in groups[6]:
+                seg_txts, interest = [], ""
+                for rt in r["rates"]:
+                    fee = _zeekr_g(rt["fee"])
+                    lab = _zeekr_seg_label(rt["tmin"], rt["tmax"])
+                    seg_txts.append(f"{lab}年费率{fee}%" if lab else f"{_zeekr_term_label(rt['tmax'])}年费率{fee}%")
+                    if fee and fee != "0":
+                        interest = _zeekr_g(rt["interest"])
+                key = (r["tag"], tuple(seg_txts), interest)
+                if key in seen:
+                    continue
+                seen.add(key)
+                head = f"限时特惠 {r['tag']}（5年）" if r["tag"] else "限时特惠（5年）"
+                body = "、".join(seg_txts)
+                if interest:
+                    body += f"（折合年化利率{interest}%）"
+                offers.append(f"{head}：首付20%起，{body}")
+                for rt in r["rates"]:
+                    f = _zeekr_g(rt["fee"])
+                    if f and f != "0":
+                        rates.add(f + "%")
+            if offers:
+                lines.append(f"{model}：" + "；".join(offers))
+
+        # —— 常规分期（type 1）——
+        if groups[1]:
+            zero, normal = [], {}
+            for r in groups[1]:
+                for rt in r["rates"]:
+                    fee = _zeekr_g(rt["fee"])
+                    term = _zeekr_term_label(rt["tmax"] or r["loanTerm"])
+                    interest = _zeekr_g(rt["interest"])
+                    if r["tag"] == "0息" or fee == "0":
+                        zero.append(term)
+                    else:
+                        normal.setdefault(fee, {"terms": [], "interest": []})
+                        normal[fee]["terms"].append(term)
+                        if interest:
+                            normal[fee]["interest"].append(interest)
+            parts = []
+            for fee, info in normal.items():
+                terms = "/".join(dict.fromkeys(info["terms"]))
+                iv = info["interest"]
+                i_txt = f"（折合年化利率{min(iv)}-{max(iv)}%）" if len(iv) > 1 else (
+                    f"（折合年化利率{iv[0]}%）" if iv else "")
+                parts.append(f"{terms}年费率{fee}%{i_txt}")
+                rates.add(fee + "%")
+            if zero:
+                parts.append("、".join(dict.fromkeys(zero)) + "0息")
+            if parts:
+                lines.append(f"{model}：常规分期 " + "；".join(parts))
+
+        # —— 尾款产品（type 2）——
+        if groups[2]:
+            terms, interests, down, unpaid = [], [], [], []
+            for r in groups[2]:
+                if r["downMin"] is not None:
+                    down.append(r["downMin"])
+                if r["unpaidMin"] is not None:
+                    unpaid.append(r["unpaidMin"])
+                    unpaid.append(r["unpaidMax"])
+                for rt in r["rates"]:
+                    interests.append(_zeekr_g(rt["interest"]))
+                    terms.append(_zeekr_term_label(rt["tmax"] or r["loanTerm"]))
+            down_txt = f"首付{min(down):g}%起" if down else ""
+            unpaid_txt = ""
+            unpaid_v = [x for x in unpaid if x is not None]
+            if unpaid_v:
+                unpaid_txt = f"、尾款{min(unpaid_v):g}%-{max(unpaid_v):g}%"
+            int_map = {}
+            for t, i in zip(terms, interests):
+                if i:
+                    int_map.setdefault(i, [])
+                    if t not in int_map[i]:
+                        int_map[i].append(t)
+            int_txt = "、".join(f"{'/'.join(ts)}年化利率{i}%" for i, ts in int_map.items())
+            if int_txt:
+                lines.append(f"{model}：尾款产品 {down_txt}{unpaid_txt}，{int_txt}（年化费率按年金口径测算）")
+
+    summary = {"models": models_with, "rates": sorted(rates),
+               "no_offer": [m for m in models if m not in models_with]}
+    return lines, summary
+
+
+def zeekr_crawl_api():
+    """直连极氪官方金融接口，返回 (政策行列表, 摘要)；失败抛异常。"""
+    import requests
+    session = requests.Session()
+    models = _zeekr_call(session, "GET", "/model/pub/modelInfo/finance/list")
+    records = []
+    for m in models:
+        mid = str(m.get("modelInfoId") or "")
+        year = m.get("modelYearCode")
+        vbody = {"modelYearCode": year} if year is not None else {"modelInfoId": mid}
+        versions = _zeekr_call(session, "POST", "/model/pub/modelVersion/finance/list", vbody)
+        for v in versions:
+            vid = str(v.get("modelVersionId") or "")
+            base = {"modelInfoId": mid, "modelVersionId": vid,
+                    "cityCode": "310100", "buyType": 0}
+            products = _zeekr_call(session, "POST", "/finance/pub/financeProduct", base)
+            for p in products:
+                ptype = p.get("financeProductType")
+                inst = _zeekr_call(session, "POST", "/finance/pub/supportInstitutionCode",
+                                    {**base, "financeProductType": ptype})
+                for item in inst:
+                    records.append(_zeekr_item(m, v, ptype, p, item))
+    lines, summary = _zeekr_build_lines(records)
+    return lines, summary
+
+
 def strip_html(html):
     html = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html)
     html = re.sub(r"(?is)<br\s*/?>", "\n", html)
@@ -248,8 +493,12 @@ NUM = r"(\d+(?:\.\d+)?)"
 def fingerprint(text):
     """把页面里的政策数字压成可比较的指纹集合（费率/首付/期数/贴息/日期）。"""
     fp = set()
-    for m in re.finditer(NUM + r"\s*%", text):
-        fp.add(f"费率{m.group(1)}%")
+    for ln in text.splitlines():
+        for m in re.finditer(NUM + r"\s*%", ln):
+            if any(k in ln for k in ("年费率", "年化费率", "利率", "费率")):
+                fp.add(f"费率{m.group(1)}%")
+            elif "首付" in ln or "尾款" in ln:
+                fp.add(f"比例{m.group(1)}%")
     for m in re.finditer(r"(\d+)\s*期\s*(?:0息|免息|0利率)", text):
         fp.add(f"{m.group(1)}期0息")
     for m in re.finditer(r"首付\s*" + NUM + r"\s*万", text):
@@ -464,23 +713,12 @@ def compact_hima(lines):
 
 
 def compact_zeekr(lines):
-    """极氪：只留统一费率口径与异常备注，去掉逐个车价/月供与车型名单。"""
-    head, note = [], []
+    """极氪：政策行已由官方接口按车系/方案类型聚合，这里只剔除异常占位行。"""
+    out = []
     for ln in lines:
-        if "：" not in ln:
-            head.append(ln)
+        if "异常" in ln or "未自动" in ln:
             continue
-        name, body = ln.split("：", 1)
-        name = name.strip()
-        if "限时" in name or "全系" in name:
-            head.append(name + "：" + body.replace("折合年化", "折合年化"))
-            continue
-        if "异常" in body or "未自动" in body:
-            note.append(name)
-            continue
-    out = list(head)
-    if note:
-        out.append("、".join(note) + "：计算器价格未自动带出（默认值异常），费率口径同上")
+        out.append(ln)
     return out
 
 def compact_li(lines):
@@ -669,6 +907,9 @@ def week_diff(prev_row, row):
     """对照上一周：返回新增车型组列表与费率/机构是否变化。"""
     pk = set().union(*[policy_models(x) for x in prev_row.get("policy", [])]) if prev_row.get("policy") else set()
     ck = set().union(*[policy_models(x) for x in row.get("policy", [])]) if row.get("policy") else set()
+    # 上期为「全系通用」口径时，视为已覆盖本期全部车系，拆车型行不算新增方案
+    if any("全系" in x for x in prev_row.get("policy") or []):
+        pk = ck
     new = sorted(ck - pk)
     rate_chg = prev_row.get("rates") != row.get("rates")
     org_chg = prev_row.get("orgs") != row.get("orgs")
@@ -680,16 +921,28 @@ def week_diff(prev_row, row):
 def crawl_brand(name, cfg, verbose=False):
     url = cfg["url"]
     js = cfg.get("js", False)
-    text, method, err = None, "", ""
-    try:
-        raw = fetch_static(url)
-        text = strip_html(raw)
-        if not any(a in text for a in cfg["anchors"]):
+    text, method, err, zeekr = None, "", "", None
+    # 极氪：优先直连官方金融接口（签名四接口链），失败再退回静态/headless
+    if name == "极氪":
+        try:
+            zlines, zsum = zeekr_crawl_api()
+            if zlines:
+                zeekr = {"lines": zlines, "summary": zsum}
+                text, method, js = "\n".join(zlines), "requests-api", False
+                log("  [极氪接口] 取到车系 %d 款" % len(zsum["models"]), verbose)
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}"
+            log(f"  [极氪接口失败] {err}", verbose)
+    if text is None:
+        try:
+            raw = fetch_static(url)
+            text = strip_html(raw)
+            if not any(a in text for a in cfg["anchors"]):
+                js = True
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}"
+            log(f"  [静态失败] {name} {err}", verbose)
             js = True
-    except Exception as e:
-        err = f"{type(e).__name__}: {e}"
-        log(f"  [静态失败] {name} {err}", verbose)
-        js = True
 
     # JSON 接口兜底（特斯拉计算器 SPA 数据走 fs-gateway）：浏览器超时/空壳时直接取产品接口
     if cfg.get("api") and not (text and any(a in text for a in cfg["anchors"])):
@@ -741,7 +994,8 @@ def crawl_brand(name, cfg, verbose=False):
             reason = f"HTTP {code}" if code else f"{type(e).__name__}"
             probes.append({"url": pu, "ok": False, "reason": reason})
 
-    return {"text": text, "method": method, "ok": ok, "url": url, "err": err, "probes": probes}
+    return {"text": text, "method": method, "ok": ok, "url": url, "err": err,
+            "probes": probes, "zeekr": zeekr}
 
 
 # ---------------------------------------------------------------- 主流程
@@ -808,6 +1062,14 @@ def main():
             continue
         log(f"→ {name} {cfg['url']}", args.verbose)
         res = crawl_brand(name, cfg, args.verbose)
+
+        # 极氪直连接口成功：用接口聚合行替换表内政策行与费率
+        if res.get("zeekr"):
+            z = res["zeekr"]
+            r0 = sec["rows"][0]
+            r0["policy"] = z["lines"]
+            if z["summary"]["rates"]:
+                r0["rates"] = z["summary"]["rates"]
 
         # 正文过薄（Bot 校验页/空壳页）不算取到
         anchors_hit = [a for a in (cfg.get("anchors") or []) if a in (res.get("text") or "")]
