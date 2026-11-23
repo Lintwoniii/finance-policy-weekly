@@ -2,8 +2,8 @@ name: 友商金融政策周报
 
 on:
   schedule:
-    - cron: '0 1,4,8,10 * * *'   # UTC，对应北京时间 09:00 / 12:00 / 16:00 / 18:00
-  workflow_dispatch:              # 也支持在 Actions 页面手动触发
+    - cron: '0 1 * * 1'          # UTC 每周一 01:00 = 北京时间周一 09:00；其余时间不自动跑
+  workflow_dispatch:              # 其余时间仅在 Actions 页面手动触发
 
 permissions:
   contents: write
