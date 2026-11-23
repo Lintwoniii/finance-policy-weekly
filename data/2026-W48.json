@@ -2,7 +2,7 @@
  "week": "11月第四周（11.23–11.29）",
  "updated": "11.23",
  "judge_window": "11.23–11.29",
- "checked_at_all": "2026-11-23 17:08 抓取",
+ "checked_at_all": "2026-11-23 17:22 抓取",
  "sections": [
   {
    "brand": "小鹏",
@@ -38,7 +38,7 @@
    "verified": {
     "status": "checked",
     "url": "https://www.xiaopeng.com/finance.html",
-    "checked_at": "2026-11-23 15:43",
+    "checked_at": "2026-11-23 17:19",
     "note": "小鹏 官网实抓（requests），方案行数 29",
     "gap": ""
    },
@@ -79,7 +79,7 @@
      "change": {
       "items": [
        {
-        "kind": "none",
+        "kind": "fail",
         "since": "",
         "text": ""
        }
@@ -93,11 +93,11 @@
     }
    ],
    "verified": {
-    "status": "checked",
+    "status": "partial",
     "url": "https://www.tesla.cn/financing-calculator",
-    "checked_at": "2026-11-23 15:43",
-    "note": "特斯拉 官网实抓（headless），方案行数 13",
-    "gap": ""
+    "checked_at": "2026-11-23 17:19",
+    "note": "特斯拉 本轮未取到（已尝试 https://www.tesla.cn/financing-calculator）：官网命中 JavaScript Bot 校验页（EO_Bot_Ssid 挑战脚本，静态仅 1360 字节，headless 渲染后正文也无方案锚点），沿用上期值，沿用上期值",
+    "gap": "官网命中 JavaScript Bot 校验页（EO_Bot_Ssid 挑战脚本，静态仅 1360 字节，headless 渲染后正文也无方案锚点），沿用上期值"
    },
    "fingerprint": {
     "特斯拉": [
@@ -143,7 +143,7 @@
    "verified": {
     "status": "checked",
     "url": "https://www.lixiang.com/help/loaninstruction.html",
-    "checked_at": "2026-11-23 15:43",
+    "checked_at": "2026-11-23 17:19",
     "note": "理想 官网实抓（requests），方案行数 22",
     "gap": ""
    },
@@ -240,9 +240,9 @@
    "verified": {
     "status": "partial",
     "url": "https://www.nio.cn/news",
-    "checked_at": "2026-11-23 15:43",
-    "note": "蔚来 本轮未取到（已尝试 https://www.nio.cn/news）：官网命中 JavaScript Bot 校验页（EO_Bot_Ssid 挑战脚本，静态仅 987 字节，headless 渲染后正文也无方案锚点），沿用上期值，沿用上期值；乐道 本轮未取到（已尝试 https://finance.onvo.cn/）：页面无方案锚点（正文未渲染出费率/首付文案），沿用上期值",
-    "gap": "官网命中 JavaScript Bot 校验页（EO_Bot_Ssid 挑战脚本，静态仅 987 字节，headless 渲染后正文也无方案锚点），沿用上期值；页面无方案锚点（正文未渲染出费率/首付文案）"
+    "checked_at": "2026-11-23 17:19",
+    "note": "蔚来 本轮未取到（已尝试 https://www.nio.cn/news）：页面无方案锚点（正文未渲染出费率/首付文案），沿用上期值；乐道 本轮未取到（已尝试 https://finance.onvo.cn/）：页面无方案锚点（正文未渲染出费率/首付文案），沿用上期值",
+    "gap": "页面无方案锚点（正文未渲染出费率/首付文案）；页面无方案锚点（正文未渲染出费率/首付文案）"
    },
    "fingerprint": {
     "蔚来": []
@@ -282,7 +282,7 @@
    "verified": {
     "status": "checked",
     "url": "https://www.zeekrlife.com/finance/FinancialCalculator",
-    "checked_at": "2026-11-23 15:43",
+    "checked_at": "2026-11-23 17:19",
     "note": "极氪 官网实抓（headless），方案行数 12；仅核计算器默认车型 001 Max，其余 10 款沿用上期逐车型实抓值",
     "gap": ""
    },
@@ -341,7 +341,7 @@
    "verified": {
     "status": "checked",
     "url": "https://www.xiaomiev.com/finance",
-    "checked_at": "2026-11-23 15:43",
+    "checked_at": "2026-11-23 17:19",
     "note": "小米 官网实抓（headless），方案行数 27",
     "gap": ""
    },
@@ -503,7 +503,7 @@
    "verified": {
     "status": "checked",
     "url": "https://hima.auto/financing-calculator/loaninstruction/",
-    "checked_at": "2026-11-23 15:43",
+    "checked_at": "2026-11-23 17:19",
     "note": "鸿蒙智行 官网实抓（requests），方案行数 28",
     "gap": ""
    },
@@ -590,8 +590,8 @@
    "verified": {
     "status": "checked",
     "url": "https://www.byd.com/cn/ocean-home/models/haibao/haibao-07-EV",
-    "checked_at": "2026-11-23 15:43",
-    "note": "比亚迪 官网实抓（headless），方案行数 14，活动期起始 11.1；已核 海豹07EV（海洋网）、元UP（王朝网 yuan-up 页）在期；腾势 官网实抓（requests），方案行数 4；已核 N9、Z9GT、Z9S、N8、N8L（闪充版/纯电版）、D9 在期（D9 路径更正为 D9-2.html）",
+    "checked_at": "2026-11-23 17:19",
+    "note": "比亚迪 官网实抓（headless），方案行数 13，活动期起始 11.1；已核 海豹07EV（海洋网）、元UP（王朝网 yuan-up 页）在期；腾势 官网实抓（requests），方案行数 2；已核 N9、Z9GT、Z9S、N8、N8L（闪充版/纯电版）、D9 在期（D9 路径更正为 D9-2.html）",
     "gap": ""
    },
    "fingerprint": {
@@ -661,8 +661,8 @@
    "verified": {
     "status": "checked",
     "url": "https://www.leapmotor.cn/A10.html",
-    "checked_at": "2026-11-23 15:43",
-    "note": "零跑 官网实抓（headless），方案行数 9；仅核 A10 车型页，其他车型未逐一取到",
+    "checked_at": "2026-11-23 17:19",
+    "note": "零跑 官网实抓（headless），方案行数 8；仅核 A10 车型页，其他车型未逐一取到",
     "gap": ""
    },
    "fingerprint": {
@@ -689,10 +689,10 @@
    ]
   }
  ],
- "digest_lead": "2026-11-23 17:08 独立抓取：0 个来源，金融数值无变化，仅更新时间戳",
+ "digest_lead": "2026-11-23 17:22 独立抓取：0 个来源，金融数值无变化，仅更新时间戳",
  "stats": {
-  "checked": 8,
-  "partial": 1,
+  "checked": 7,
+  "partial": 2,
   "pending": 0
  }
 }
