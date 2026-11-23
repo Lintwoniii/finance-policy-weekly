@@ -482,6 +482,18 @@ def compact_zeekr(lines):
         out.append("、".join(note) + "：计算器价格未自动带出（默认值异常），费率口径同上")
     return out
 
+def compact_li(lines):
+    """理想：按车型分组；产品名（随心还/月息年本等）不单独成行，只保留车型组行。"""
+    product_heads = {"随心还", "月息年本", "常规贷款", "标准贷款", "弹性贷款"}
+    out = []
+    for ln in lines:
+        head = ln.split("：", 1)[0].strip() if "：" in ln else ln.strip()
+        if head in product_heads:
+            continue
+        out.append(ln)
+    return out
+
+
 def compact_byd(lines):
     merged, generic = {}, []
     for ln in lines:
@@ -917,7 +929,7 @@ def main():
     # 比亚迪/腾势：把长段落提炼成“车型：短要点”，并对上周同样口径归一后再比对
     def _compact_sec(d):
         for sc in d["sections"]:
-            fn = {"比亚迪": compact_byd, "鸿蒙智行": compact_hima, "极氪": compact_zeekr}.get(sc["brand"])
+            fn = {"比亚迪": compact_byd, "鸿蒙智行": compact_hima, "极氪": compact_zeekr, "理想": compact_li}.get(sc["brand"])
             for r2 in sc["rows"]:
                 if not r2.get("policy"):
                     continue
