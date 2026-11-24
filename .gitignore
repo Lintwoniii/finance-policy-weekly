@@ -6,3 +6,6 @@ __pycache__/
 
 # 云端发布线配置（含飞书工作簿 token），不进仓库
 weekly/sheet_config.json
+
+# 本地核定备份，不进仓库
+*.bak*

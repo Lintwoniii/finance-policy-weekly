@@ -1536,11 +1536,11 @@ def main():
                 if fn:
                     r2["policy"] = fn(r2["policy"], r2)
                 r2["policy"] = drop_perks(r2["policy"])
-                if sc["brand"] == "比亚迪" and r2.get("sub") == "腾势":
-                    strip_lease_orgs(r2)
-    _compact_sec(data)
-    if PREV:
-        _compact_sec(PREV)
+    # render-only 只用仓库内核定 JSON 出表，不再跑紧凑/去噱头规则二次归一，避免洗丢核定方案语言
+    if not args.render_only:
+        _compact_sec(data)
+        if PREV:
+            _compact_sec(PREV)
 
     # 同一 section 可能有多个抓取来源（比亚迪/腾势、蔚来/乐道），统一汇总状态与备注
     for sec in data["sections"]:
