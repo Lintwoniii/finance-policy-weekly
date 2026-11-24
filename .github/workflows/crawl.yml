@@ -3,7 +3,14 @@ name: 友商金融政策周报
 on:
   schedule:
     - cron: '0 1 * * 1'          # UTC 每周一 01:00 = 北京时间周一 09:00；其余时间不自动跑
-  workflow_dispatch:              # 其余时间仅在 Actions 页面手动触发
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'full=抓取9家+出表+部署；render=只用仓库现有JSON出表并部署（约1分钟）'
+        required: true
+        default: 'render'
+        type: choice
+        options: [render, full]
 
 permissions:
   contents: write
@@ -23,19 +30,36 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
 
-      - name: 安装依赖与浏览器
+      - name: 缓存 Playwright 浏览器
+        if: ${{ github.event_name == 'schedule' || inputs.mode == 'full' }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+
+      - name: 安装依赖（render 模式只装 requests）
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          python -m playwright install --with-deps chromium
+          if [ "${{ inputs.mode }}" = "render" ]; then
+            pip install "requests>=2.31"
+          else
+            pip install -r requirements.txt
+            python -m playwright install-deps chromium
+            python -m playwright install chromium
+          fi
 
       - name: 抓取 9 家官网并出表（单次失败不阻断发布）
+        if: ${{ github.event_name == 'schedule' || inputs.mode == 'full' }}
         continue-on-error: true
         run: python agent.py --verbose
 
       - name: 兜底：用仓库内已有 JSON 重新出表
-        run: python agent.py --render-only
+        run: |
+          pip install "requests>=2.31"
+          python agent.py --render-only
 
       - name: 生成首页 index.html
         run: cp "out/友商金融政策动态-周报表.html" out/index.html
@@ -45,7 +69,7 @@ jobs:
           git config user.name "policy-agent"
           git config user.email "policy-agent@users.noreply.github.com"
           git add data out
-          git commit -m "auto: $(date -u '+%Y-%m-%d %H:%M') crawl" || echo "no changes"
+          git commit -m "auto: $(date -u '+%Y-%m-%d %H:%M') ${{ inputs.mode || 'crawl' }}" || echo "no changes"
           git push
 
       - name: 上传 Pages 产物
