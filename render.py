@@ -46,7 +46,7 @@ h1{text-align:center;font-size:19px;font-weight:700;letter-spacing:.2px;margin-b
 .tablebox{overflow-x:auto;border:1px solid var(--line)}
 table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:1290px;font-size:12.5px}
 col.c1{width:74px} col.c2{width:76px} col.c3{width:104px}
-col.c4{width:184px} col.c5{width:162px} col.c6{width:86px} col.c7{width:auto} col.c8{width:80px}
+col.c4{width:184px} col.c5{width:162px} col.c6{width:86px} col.c7{width:auto}
 thead th{background:var(--head);color:#2c3a4a;font-weight:650;font-size:12.5px;padding:9px 10px;border-bottom:1px solid var(--line-strong);border-right:1px solid var(--line);text-align:center;white-space:nowrap}
 tbody th{background:var(--brand-bg);font-weight:650;font-size:13px;text-align:center;border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:10px 6px;vertical-align:middle}
 tbody td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:9px 10px;vertical-align:top}
@@ -72,11 +72,6 @@ td:last-child,thead th:last-child{border-right:0}
 .p-line{display:block}
 .dp{color:var(--accent)}
 .new-car{font-weight:700;text-decoration:underline;text-underline-offset:2px}
-.c-verify{text-align:center;vertical-align:middle!important}
-.vchip{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11.5px;font-weight:650;white-space:nowrap}
-.vchip.ok{color:var(--green);background:#e9f4ee}
-.vchip.part{color:var(--amber);background:#fbf2df}
-.vchip.wait{color:#6b7683;background:#eceff3}
 .foot{margin-top:10px;font-size:11.5px;color:var(--faint);line-height:1.75}
 @media (max-width:900px){table{font-size:12px;min-width:1180px}}
 @media print{body{background:#fff}.wrap{max-width:none;padding:0}.tablebox{overflow:visible;border:0}table{min-width:0;font-size:9pt}}
@@ -85,12 +80,12 @@ td:last-child,thead th:last-child{border-right:0}
 <body>
 <div class="wrap">
   <h1>__WEEK__ 友商金融政策动态<span style="font-size:13px;font-weight:500;color:#8994a0;margin-left:8px">（__UPDATED__）</span></h1>
-  <p class="subtxt">9 家官网实抓 · 最近一次抓取 __LAST_CRAWL__ · 官网核对 __N_CHECKED__ 已核对 / __N_PARTIAL__ 部分核对 / __N_PENDING__ 待核</p>
+  <p class="subtxt">9 家官网实抓 · 最近一次抓取 __LAST_CRAWL__</p>
   <div class="tablebox">
     <table>
       <colgroup>
         <col class="c1" /><col class="c2" /><col class="c3" /><col class="c4" />
-        <col class="c5" /><col class="c6" /><col class="c7" /><col class="c8" />
+        <col class="c5" /><col class="c6" /><col class="c7" />
       </colgroup>
       <thead>
         <tr>
@@ -100,7 +95,6 @@ td:last-child,thead th:last-child{border-right:0}
           <th scope="col">周度变化</th>
           <th scope="col">是否有贴息</th>
           <th scope="col">贴息政策</th>
-          <th scope="col">官网核对</th>
         </tr>
       </thead>
       <tbody>
@@ -119,9 +113,6 @@ __ROWS__
 def render_html(data):
     rows_html = []
     sections = data["sections"]
-    n_checked = sum(1 for s in sections if s["verified"]["status"] == "checked")
-    n_partial = sum(1 for s in sections if s["verified"]["status"] == "partial")
-    n_pending = sum(1 for s in sections if s["verified"]["status"] == "pending")
 
     for sec in sections:
         rows = sec["rows"]
@@ -178,25 +169,12 @@ def render_html(data):
                 head, sep, body = line.partition("：")
                 return f'<span class="{cls}">{esc(head)}{sep}{key(body)}</span>'
             tds.append('<td class="c-policy">' + "".join(render_p(x) for x in r["policy"]) + "</td>")
-
-            if i == 0:
-                st = sec["verified"]["status"]
-                if st == "checked":
-                    vchip = '<span class="vchip ok" title="已抓取官网并逐项比对">已核对</span>'
-                elif st == "partial":
-                    vchip = '<span class="vchip part" title="仅部分车型取到，或数值有变化待确认">部分核对</span>'
-                else:
-                    vchip = '<span class="vchip wait" title="官网未取到，沿用上期值">待核对</span>'
-                tds.append(f'<td class="c-verify" rowspan="{span}">{vchip}</td>')
             rows_html.append("<tr>" + "".join(tds) + "</tr>")
 
     html = (TEMPLATE
             .replace("__WEEK__", data["week"])
             .replace("__UPDATED__", str(data["updated"]))
             .replace("__LAST_CRAWL__", (data.get("checked_at_all") or "").replace(" 抓取", ""))
-            .replace("__N_CHECKED__", str(n_checked))
-            .replace("__N_PARTIAL__", str(n_partial))
-            .replace("__N_PENDING__", str(n_pending))
             .replace("__JUDGE_WINDOW__", data.get("judge_window", ""))
             .replace("__ROWS__", "\n".join(rows_html)))
     return html
