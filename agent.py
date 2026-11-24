@@ -689,6 +689,8 @@ def compact_hima(lines, row=None):
         head, body = ln.split("：", 1)
         parts = merge_zero([norm_clause(x) for x in re.split(r"[；;]", norm_body(body))
                             if x.strip() and not any(k in x for k in _DROP)])
+        if not parts:
+            continue   # 剔除只有车型标题、无有效条款的空壳行
         key = "；".join(parts)
         groups.setdefault(key, [])
         if key not in order:
