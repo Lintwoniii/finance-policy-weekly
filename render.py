@@ -80,7 +80,28 @@ td:last-child,thead th:last-child{border-right:0}
 .sheet-btn{display:inline-block;margin-left:10px;padding:3px 12px;border:1px solid var(--accent);border-radius:5px;color:var(--accent);font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap}
 .sheet-btn:hover{background:#eef4fb}
 .foot{margin-top:10px;font-size:11.5px;color:var(--faint);line-height:1.75}
-@media (max-width:900px){table{font-size:12px;min-width:1180px}}
+.m-head{display:none}
+@media (max-width:820px){
+  .wrap{padding:12px 10px 26px}
+  h1{font-size:17px;line-height:1.4}
+  h1 span{display:block;margin:5px 0 0!important;font-size:12.5px!important}
+  .subtxt{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:5px 8px;font-size:11.5px;line-height:1.7;margin-bottom:10px}
+  .subtxt .sheet-btn{margin-left:0}
+  .tablebox{overflow:visible;border:0}
+  table{min-width:0!important;table-layout:auto!important;font-size:12.5px}
+  colgroup,thead{display:none}
+  tbody tr{display:block;background:#fff;border:1px solid var(--line);border-radius:10px;margin:0 0 12px;padding:0 12px 8px;box-shadow:0 1px 4px rgba(23,34,46,.07)}
+  tbody td,tbody th{display:block;width:auto!important;max-width:100%;border-right:0;border-bottom:1px dashed #edf0f3;padding:9px 0;text-align:left!important;white-space:normal!important;vertical-align:top}
+  tbody td:last-child{border-bottom:0}
+  .c-brand,.c-sub,.c-verify{display:none!important}
+  .m-head{display:flex!important;align-items:center;gap:8px;flex-wrap:wrap;margin:0 -12px 5px;padding:10px 12px;background:var(--head);border-bottom:1px solid var(--line);border-radius:10px 10px 0 0}
+  .m-brand{font-size:14px;font-weight:700;color:#2c3a4a}
+  .m-sub{font-size:12px;font-weight:650;color:var(--accent);background:#fff;border:1px solid #cfdff2;border-radius:4px;padding:1px 8px;white-space:nowrap}
+  .m-head .vchip{margin-left:auto}
+  tbody td[data-label]::before{content:attr(data-label);display:block;font-size:11px;font-weight:650;color:var(--faint);margin-bottom:4px}
+  .c-change .ctext{font-size:12px}
+  .foot{font-size:11px}
+}
 @media print{body{background:#fff}.wrap{max-width:none;padding:0}.tablebox{overflow:visible;border:0}table{min-width:0;font-size:9pt}}
 </style>
 </head>
@@ -132,16 +153,26 @@ def render_html(data):
         rows = sec["rows"]
         has_sub = any(r.get("sub") for r in rows)
         span = len(rows)
+        st = sec["verified"]["status"]
+        if st == "checked":
+            vchip = '<span class="vchip ok" title="已抓取官网并逐项比对">已核对</span>'
+        elif st == "partial":
+            vchip = '<span class="vchip part" title="仅部分车型取到，或数值有变化待确认">部分核对</span>'
+        else:
+            vchip = '<span class="vchip wait" title="官网未取到，沿用上期值">待核对</span>'
         for i, r in enumerate(rows):
             is_new = any(it.get("text") and "上新" in it["text"] for it in r["change"]["items"])
             tds = []
+            _ms = (r.get("sub") or "").strip()
+            m_sub = f'<span class="m-sub">{esc(_ms)}</span>' if (has_sub and _ms and _ms != sec["brand"]) else ""
+            tds.append(f'<td class="m-head"><span class="m-brand">{esc(sec["brand"])}</span>{m_sub}{vchip}</td>')
             if i == 0:
                 colspan = "" if has_sub else ' colspan="2"'
                 tds.append(f'<th class="c-brand" rowspan="{span}"{colspan} scope="rowgroup">{esc(sec["brand"])}</th>')
             if has_sub:
                 tds.append(f'<td class="c-sub">{esc(r.get("sub") or "")}</td>')
 
-            tds.append('<td class="c-rate">' + "".join(
+            tds.append('<td class="c-rate" data-label="基础对客费率">' + "".join(
                 f'<span class="rate-line">{esc(x)}</span>' for x in r["rates"]) + "</td>")
 
             orgs = []
@@ -149,7 +180,7 @@ def render_html(data):
                 org, rspan = (item[0], item[1]) if isinstance(item, list) else (str(item), 1)
                 attr = f' rowspan="{rspan}"' if rspan > 1 else ""
                 orgs.append(f'<span class="org-line"{attr}>{esc(org)}</span>')
-            tds.append(f'<td class="c-org">{"".join(orgs)}</td>')
+            tds.append(f'<td class="c-org" data-label="合作机构">{"".join(orgs)}</td>')
 
             chg = []
             for it in r["change"]["items"]:
@@ -172,26 +203,19 @@ def render_html(data):
                     chg.append(f'<span class="ctext">{key(text)}</span>')
                 if since:
                     chg.append(f'<span class="chg-sub">起 {esc(since)}</span>')
-            tds.append('<td class="c-change">' + "".join(chg) + "</td>")
+            tds.append('<td class="c-change" data-label="周度变化">' + "".join(chg) + "</td>")
 
             chip = "yes" if r["subsidy"] == "有" else "no"
-            tds.append(f'<td class="c-subsidy"><span class="chip {chip}">{esc(r["subsidy"])}</span></td>')
+            tds.append(f'<td class="c-subsidy" data-label="是否有贴息"><span class="chip {chip}">{esc(r["subsidy"])}</span></td>')
             def render_p(line):
                 cls = "p-line new-car" if is_new else "p-line"
                 if "：" not in line:
                     return f'<span class="{cls}">{key(line)}</span>'
                 head, sep, body = line.partition("：")
                 return f'<span class="{cls}">{esc(head)}{sep}{key(body)}</span>'
-            tds.append('<td class="c-policy">' + "".join(render_p(x) for x in r["policy"]) + "</td>")
+            tds.append('<td class="c-policy" data-label="贴息政策">' + "".join(render_p(x) for x in r["policy"]) + "</td>")
 
             if i == 0:
-                st = sec["verified"]["status"]
-                if st == "checked":
-                    vchip = '<span class="vchip ok" title="已抓取官网并逐项比对">已核对</span>'
-                elif st == "partial":
-                    vchip = '<span class="vchip part" title="仅部分车型取到，或数值有变化待确认">部分核对</span>'
-                else:
-                    vchip = '<span class="vchip wait" title="官网未取到，沿用上期值">待核对</span>'
                 tds.append(f'<td class="c-verify" rowspan="{span}">{vchip}</td>')
             rows_html.append("<tr>" + "".join(tds) + "</tr>")
 
