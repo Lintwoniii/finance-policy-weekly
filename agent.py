@@ -519,6 +519,23 @@ def fingerprint(text):
     return sorted(fp)
 
 
+def merge_repeat_prefix(lines):
+    """同一行内相邻相同「车型：」前缀只保留首行，后续行去掉重复前缀。"""
+    out, prev_prefix = [], None
+    for ln in lines:
+        if "：" in ln:
+            prefix, rest = ln.split("：", 1)
+            if out and prefix == prev_prefix:
+                out.append(rest)
+            else:
+                out.append(ln)
+                prev_prefix = prefix
+        else:
+            out.append(ln)
+            prev_prefix = None
+    return out
+
+
 def policy_lines(text, max_lines=40):
     """挑出方案语言行（含费率/首付/期/贴息），已过禁词过滤。"""
     keys = ("年费率", "年化费率", "0息", "免息", "首付", "贴息", "期", "免", "折合", "月供", "大定", "开票")
@@ -1051,8 +1068,11 @@ def tesla_crawl_api():
         residual = next((pl.get("residualPayment") for rec in balloon0 for pl in rec["plans"]
                          if pl.get("residualPayment")), None)
         res_txt = f"尾款{residual/10000:g}万" if residual else ""
-        head = "/".join(compact(set().union(*bal_groups.values())))
-        lines.append(f"{head}：{_down_range(bal_groups)}首付 {res_txt}「特从容」5年0息")
+        bal_head = "/".join(compact(set().union(*bal_groups.values())))
+        if lines and lines[0].startswith(bal_head + "："):
+            lines.append(f"{_down_range(bal_groups)}首付 {res_txt}「特从容」5年0息")
+        else:
+            lines.append(f"{bal_head}：{_down_range(bal_groups)}首付 {res_txt}「特从容」5年0息")
 
     std_rates = [x for rec in standard for x in rec["rates"] if x]
     bank_std = [x for rec in standard if rec["ptype"] == "AUTO_LOAN" for x in rec["rates"] if x]
@@ -1443,6 +1463,7 @@ def main():
                     hit = next(([n] for n in srcs if n not in used), [])
             used |= set(hit)
             row_srcs.append(hit)
+            r["policy"] = merge_repeat_prefix(r.get("policy") or [])
 
         prev_sec = None
         if PREV:
