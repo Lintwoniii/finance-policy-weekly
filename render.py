@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """把 data/<周>.json 渲染成单文件 HTML（纯表格，无脚本、无统计条、无平台依赖）。"""
+import re
 from html import escape
 
 
@@ -8,10 +9,20 @@ def esc(t):
     return escape(str(t), quote=True)
 
 
+# 首付短语标蓝：首付X万起 / X万首付 / X%首付 / 0首付(起)
+DP_PATTERNS = [
+    r"首付[\d.]+万起?",
+    r"[\d.]+(?:-[\d.]+)?万首付",
+    r"[\d.]+%(?:-[\d.]+%)?首付",
+    r"0首付起?",
+]
+
+
 def key(t):
-    return (esc(t).replace("0首付", '<span class="k">0首付</span>')
-            .replace("0息", '<span class="k">0息</span>')
-            .replace("0利息", '<span class="k">0利息</span>'))
+    out = esc(t)
+    for pat in DP_PATTERNS:
+        out = re.sub(pat, r'<span class="dp">\g<0></span>', out)
+    return out
 
 
 TEMPLATE = r"""<!DOCTYPE html>
@@ -59,7 +70,8 @@ td:last-child,thead th:last-child{border-right:0}
 .chip.no{color:#8a3b2f;background:#f6ece9}
 .c-policy{line-height:1.62}
 .p-line{display:block}
-.k{color:var(--accent);font-weight:650}
+.dp{color:var(--accent)}
+.new-car{font-weight:700;text-decoration:underline;text-underline-offset:2px}
 .c-verify{text-align:center;vertical-align:middle!important}
 .vchip{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11.5px;font-weight:650;white-space:nowrap}
 .vchip.ok{color:var(--green);background:#e9f4ee}
@@ -116,6 +128,7 @@ def render_html(data):
         has_sub = any(r.get("sub") for r in rows)
         span = len(rows)
         for i, r in enumerate(rows):
+            is_new = any(it.get("text") and "上新" in it["text"] for it in r["change"]["items"])
             tds = []
             if i == 0:
                 colspan = "" if has_sub else ' colspan="2"'
@@ -151,15 +164,20 @@ def render_html(data):
                 else:
                     chg.append('<span class="ctag last">上周</span>')
                 if text:
-                    chg.append(f'<span class="ctext">{esc(text)}</span>')
+                    chg.append(f'<span class="ctext">{key(text)}</span>')
                 if since:
                     chg.append(f'<span class="chg-sub">起 {esc(since)}</span>')
             tds.append('<td class="c-change">' + "".join(chg) + "</td>")
 
             chip = "yes" if r["subsidy"] == "有" else "no"
             tds.append(f'<td class="c-subsidy"><span class="chip {chip}">{esc(r["subsidy"])}</span></td>')
-            tds.append('<td class="c-policy">' + "".join(
-                f'<span class="p-line">{key(x)}</span>' for x in r["policy"]) + "</td>")
+            def render_p(line):
+                cls = "p-line new-car" if is_new else "p-line"
+                if "：" not in line:
+                    return f'<span class="{cls}">{key(line)}</span>'
+                head, sep, body = line.partition("：")
+                return f'<span class="{cls}">{esc(head)}{sep}{key(body)}</span>'
+            tds.append('<td class="c-policy">' + "".join(render_p(x) for x in r["policy"]) + "</td>")
 
             if i == 0:
                 st = sec["verified"]["status"]

@@ -639,6 +639,9 @@ def tokens(b):
             out.append(f"{pct}%首付 {to_year(mm.group(2), mm.group(3))}年{pre}0息")
     for mm in re.finditer(r"年费率\s*([\d.]+)%", b):
         out.append(f"年费率{mm.group(1)}%")
+    # 5免X 分期贴息方案（如 10%首付 5免2（后3年2.99%））原样保留
+    for mm in re.finditer(r"(?:[\d.]+%(?:-[\d.]+%)?首付\s*)?5免\d（后\d年[\d.]+%）", b):
+        out.append(mm.group(0).strip())
     if "超长贷" in b:
         out.append("至高5年超长贷")
     return list(dict.fromkeys(out))
