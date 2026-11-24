@@ -1682,11 +1682,11 @@ def main():
     if args.render_only:
         pass
 
-    # 飞书云文档链接（仓库内 doc_link.json，仅存分享 URL，不含表格 token）
-    doc_link = BASE / "doc_link.json"
-    if doc_link.exists():
+    # 飞书在线表格链接（仓库内 sheet_link.json，仅存分享 URL）
+    sheet_link = BASE / "sheet_link.json"
+    if sheet_link.exists():
         try:
-            data["doc_url"] = json.loads(doc_link.read_text(encoding="utf-8")).get("doc_url", "") or data.get("doc_url", "")
+            data["sheet_url"] = json.loads(sheet_link.read_text(encoding="utf-8")).get("sheet_url", "") or data.get("sheet_url", "")
         except Exception:
             pass
 

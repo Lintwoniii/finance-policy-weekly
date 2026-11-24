@@ -87,7 +87,7 @@ td:last-child,thead th:last-child{border-right:0}
 <body>
 <div class="wrap">
   <h1>__WEEK__ 友商金融政策动态<span style="font-size:13px;font-weight:500;color:#8994a0;margin-left:8px">（__UPDATED__）</span></h1>
-  <p class="subtxt">9 家官网实抓 · 最近一次抓取 __LAST_CRAWL__ · 官网核对 __N_CHECKED__ 已核对 / __N_PARTIAL__ 部分核对 / __N_PENDING__ 待核 __DOC_BTN__</p>
+  <p class="subtxt">9 家官网实抓 · 最近一次抓取 __LAST_CRAWL__ · 官网核对 __N_CHECKED__ 已核对 / __N_PARTIAL__ 部分核对 / __N_PENDING__ 待核 __SHEET_BTN__</p>
   <div class="tablebox">
     <table>
       <colgroup>
@@ -125,8 +125,8 @@ def render_html(data):
     n_partial = sum(1 for s in sections if s["verified"]["status"] == "partial")
     n_pending = sum(1 for s in sections if s["verified"]["status"] == "pending")
 
-    doc_url = (data.get("doc_url") or "").strip()
-    doc_btn = ('<a class="sheet-btn" href="%s" target="_blank" rel="noopener">在飞书文档中打开</a>' % esc(doc_url)) if doc_url else ""
+    sheet_url = (data.get("sheet_url") or "").strip()
+    sheet_btn = ('<a class="sheet-btn" href="%s" target="_blank" rel="noopener">在飞书表格中打开</a>' % esc(sheet_url)) if sheet_url else ""
 
     for sec in sections:
         rows = sec["rows"]
@@ -203,6 +203,6 @@ def render_html(data):
             .replace("__N_PARTIAL__", str(n_partial))
             .replace("__N_PENDING__", str(n_pending))
             .replace("__JUDGE_WINDOW__", data.get("judge_window", ""))
-            .replace("__DOC_BTN__", doc_btn)
+            .replace("__SHEET_BTN__", sheet_btn)
             .replace("__ROWS__", "\n".join(rows_html)))
     return html
