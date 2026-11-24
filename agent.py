@@ -337,98 +337,60 @@ def _zeekr_build_lines(records):
     models = order + [m for m in by_model if m not in order]
 
     lines, rates, models_with = [], set(), []
+    model_pol = {}
+
+    def bargain_desc(r):
+        paid = [rt for rt in r["rates"] if _zeekr_g(rt["fee"]) not in ("", "0")]
+        lab, fee = "", ""
+        if paid:
+            lab = _zeekr_seg_label(paid[0].get("tmin"), paid[0].get("tmax"))
+            fee = _zeekr_g(paid[0]["fee"])
+            rates.add(fee + "%")
+        tag = r["tag"] or "限时特惠"
+        return f"{tag}（{lab}{fee}%）" if lab and fee else tag
+
     for model in models:
         recs = by_model.get(model, [])
-        groups = {6: [], 1: [], 2: []}
-        for r in recs:
-            groups.setdefault(r["ptype"], []).append(r)
         if not recs:
-            lines.append(f"{model}：金融接口未返回在期方案（限时特惠/常规分期/尾款产品均无记录）")
             continue
         models_with.append(model)
-
-        # —— 限时特惠（type 6）——
-        if groups[6]:
-            offers = []
-            seen = set()
-            for r in groups[6]:
-                seg_txts, interest = [], ""
+        descs = []
+        for r in recs:
+            if r["ptype"] == 6:
+                d = bargain_desc(r)
+                if d not in descs:
+                    descs.append(d)
+            elif r["ptype"] == 1:
                 for rt in r["rates"]:
                     fee = _zeekr_g(rt["fee"])
-                    lab = _zeekr_seg_label(rt["tmin"], rt["tmax"])
-                    seg_txts.append(f"{lab}年费率{fee}%" if lab else f"{_zeekr_term_label(rt['tmax'])}年费率{fee}%")
-                    if fee and fee != "0":
-                        interest = _zeekr_g(rt["interest"])
-                key = (r["tag"], tuple(seg_txts), interest)
-                if key in seen:
-                    continue
-                seen.add(key)
-                head = f"限时特惠 {r['tag']}（5年）" if r["tag"] else "限时特惠（5年）"
-                body = "、".join(seg_txts)
-                if interest:
-                    body += f"（折合年化利率{interest}%）"
-                offers.append(f"{head}：首付20%起，{body}")
-                for rt in r["rates"]:
-                    f = _zeekr_g(rt["fee"])
-                    if f and f != "0":
-                        rates.add(f + "%")
-            if offers:
-                lines.append(f"{model}：" + "；".join(offers))
-
-        # —— 常规分期（type 1）——
-        if groups[1]:
-            zero, normal = [], {}
-            for r in groups[1]:
-                for rt in r["rates"]:
-                    fee = _zeekr_g(rt["fee"])
-                    term = _zeekr_term_label(rt["tmax"] or r["loanTerm"])
-                    interest = _zeekr_g(rt["interest"])
                     if r["tag"] == "0息" or fee == "0":
-                        zero.append(term)
+                        if "5年0息" not in descs:
+                            descs.append("5年0息")
                     else:
-                        normal.setdefault(fee, {"terms": [], "interest": []})
-                        normal[fee]["terms"].append(term)
-                        if interest:
-                            normal[fee]["interest"].append(interest)
-            parts = []
-            for fee, info in normal.items():
-                terms = "/".join(dict.fromkeys(info["terms"]))
-                iv = info["interest"]
-                i_txt = f"（折合年化利率{min(iv)}-{max(iv)}%）" if len(iv) > 1 else (
-                    f"（折合年化利率{iv[0]}%）" if iv else "")
-                parts.append(f"{terms}年费率{fee}%{i_txt}")
-                rates.add(fee + "%")
-            if zero:
-                parts.append("、".join(dict.fromkeys(zero)) + "0息")
-            if parts:
-                lines.append(f"{model}：常规分期 " + "；".join(parts))
+                        rates.add(fee + "%")
+            # 尾款产品（type 2）按本周口径不进政策列
+        model_pol[model] = descs
 
-        # —— 尾款产品（type 2）——
-        if groups[2]:
-            terms, interests, down, unpaid = [], [], [], []
-            for r in groups[2]:
-                if r["downMin"] is not None:
-                    down.append(r["downMin"])
-                if r["unpaidMin"] is not None:
-                    unpaid.append(r["unpaidMin"])
-                    unpaid.append(r["unpaidMax"])
-                for rt in r["rates"]:
-                    interests.append(_zeekr_g(rt["interest"]))
-                    terms.append(_zeekr_term_label(rt["tmax"] or r["loanTerm"]))
-            down_txt = f"首付{min(down):g}%起" if down else ""
-            unpaid_txt = ""
-            unpaid_v = [x for x in unpaid if x is not None]
-            if unpaid_v:
-                unpaid_txt = f"、尾款{min(unpaid_v):g}%-{max(unpaid_v):g}%"
-            int_map = {}
-            for t, i in zip(terms, interests):
-                if i:
-                    int_map.setdefault(i, [])
-                    if t not in int_map[i]:
-                        int_map[i].append(t)
-            int_txt = "、".join(f"{'/'.join(ts)}年化利率{i}%" for i, ts in int_map.items())
-            if int_txt:
-                lines.append(f"{model}：尾款产品 {down_txt}{unpaid_txt}，{int_txt}（年化费率按年金口径测算）")
+    for model in models:
+        if model not in models_with:
+            lines.append(f"{model}：车型更新，尚未更新金融产品")
+
+    def join(ms):
+        return "/".join(ms)
+
+    groups, order = {}, []
+    for model in models:
+        if model not in model_pol:
+            continue
+        key = tuple(model_pol[model])
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(model)
+
+    for key in order:
+        body = "、".join(f"0首付 {d}" for d in key)
+        lines.append(f"{join(groups[key])}：{body}")
 
     summary = {"models": models_with, "rates": sorted(rates),
                "no_offer": [m for m in models if m not in models_with]}
@@ -697,7 +659,7 @@ def norm_clause(c):
         return f"首付{m.group(1)}万起 {m.group(2)}年 {m.group(3)}%"
     m = re.match(r"首付\s*([\d.]+)\s*万元起[，,]\s*5\s*年期[，,]\s*前\s*(\d)\s*年年费率\s*0%[，,]\s*后\s*(\d)\s*年年费率\s*([\d.]+)%$", c)
     if m:
-        return f"首付{m.group(1)}万起 5免{m.group(2)}（前{m.group(2)}年0/后{m.group(3)}年{m.group(4)}%）"
+        return f"首付{m.group(1)}万起 5免{m.group(2)}（后{m.group(3)}年{m.group(4)}%）"
     m = re.match(r"0\s*首付起[，,]\s*1-5\s*年期[，,]\s*年费率\s*([\d.]+)%$", c)
     if m:
         return f"0首付 1-5年 {m.group(1)}%"
@@ -716,23 +678,26 @@ def merge_zero(parts):
         others.insert(0, "0首付 1-5年 " + "%/".join(rates) + "%")
     return others
 
-def compact_hima(lines):
+def compact_hima(lines, row=None):
 
-    groups, order = {}, []
+    _DROP = ("弹性贷款", "融资租赁", "直租", "回租")
+    groups, order, keep = {}, [], []
     for ln in lines:
         if "：" not in ln:
+            keep.append(ln)   # 兜底行（如“无贴息政策”）原样保留
             continue
         head, body = ln.split("：", 1)
-        parts = merge_zero([norm_clause(x) for x in re.split(r"[；;]", norm_body(body)) if x.strip()])
+        parts = merge_zero([norm_clause(x) for x in re.split(r"[；;]", norm_body(body))
+                            if x.strip() and not any(k in x for k in _DROP)])
         key = "；".join(parts)
         groups.setdefault(key, [])
         if key not in order:
             order.append(key)
         groups[key].append(head.strip())
-    return [f"{'/'.join(groups[k])}：{k}" for k in order]
+    return keep + [f"{'/'.join(groups[k])}：{k}" for k in order]
 
 
-def compact_zeekr(lines):
+def compact_zeekr(lines, row=None):
     """极氪：政策行已由官方接口按车系/方案类型聚合，这里只剔除异常占位行。"""
     out = []
     for ln in lines:
@@ -741,7 +706,7 @@ def compact_zeekr(lines):
         out.append(ln)
     return out
 
-def compact_li(lines):
+def compact_li(lines, row=None):
     """理想：按车型分组；产品名（随心还/月息年本等）不单独成行，只保留车型组行。"""
     product_heads = {"随心还", "月息年本", "常规贷款", "标准贷款", "弹性贷款"}
     out = []
@@ -753,7 +718,23 @@ def compact_li(lines):
     return out
 
 
-def compact_byd(lines):
+def strip_lease_orgs(row):
+    """剔除融资租赁/融租类承接机构（弗迪融租/融担等），仅保留银行与汽车金融公司。"""
+    out = []
+    for org, rs in row.get("orgs", []):
+        parts = [p.strip() for p in re.split(r"[、；;,]", str(org)) if p.strip()]
+        parts = [p for p in parts if not any(k in p for k in ("弗迪", "融租", "融担"))]
+        if parts:
+            out.append(["、".join(parts), rs])
+    row["orgs"] = out
+
+
+def compact_byd(lines, row=None):
+    # 王朝/海洋：已用“全系贴息”总述，不再逐条爬车型方案；仅保留含“全系”的总述行
+    if row and ("王朝" in str(row.get("sub", "")) or "海洋" in str(row.get("sub", ""))):
+        generic = [l for l in lines if l.startswith("全系")]
+        if generic:
+            return generic
     merged, generic = {}, []
     for ln in lines:
         if "：" not in ln:
@@ -892,6 +873,9 @@ def parse_hima_rows(text):
 
     grouped = {}
     for it in items:
+        # 常规低息类方案按口径不进表：优惠费率（0首付）、限时低息；仅保留限时5免X/5免3/0息贴息方案
+        if ("优惠费率" in it["offer"]) or ("限时低息" in it["offer"]):
+            continue
         if not it["models"]:
             continue
         body = re.sub(r"；+", "；", "；".join(it["terms"])).strip("；")
@@ -1089,11 +1073,116 @@ def tesla_crawl_api():
     return lines, summary
 
 
+# ------------------------------------------------------- 小米直连金融试算接口
+XIAOMI_TRIAL_URL = "https://afs.airstarfinance.net/api/free/access/car/new/trial"
+XIAOMI_HEADERS = {"User-Agent": UA, "Referer": "https://www.xiaomiev.com/finance"}
+_XMI_EXCLUDE_NAMES = {"低月供"}
+
+
+def _xmi_down(p):
+    di = p.get("downInfo") or {}
+    if di.get("byAmount") and di.get("amount"):
+        return f"{di['amount']/1000000:g}万"
+    if di.get("rate") is not None:
+        return f"{di['rate']/100000:g}%首付"
+    return ""
+
+
+def _xmi_group(serial, model):
+    if "Ultra" in model:
+        return "ultra"
+    if "GT" in model:
+        return "gt"
+    if serial == "N90":
+        return "n90"
+    return "main"
+
+
+_XMI_GROUP_PREFIX = {
+    "n90": "澎程N90",
+    "ultra": "SU7 Ultra",
+    "gt": "YU7 GT",
+    "main": "澎程N70/SU7/YU7（不含YU7 GT）",
+}
+
+
+def xiaomi_crawl_api():
+    r = requests.get(XIAOMI_TRIAL_URL, headers=XIAOMI_HEADERS, timeout=20)
+    r.raise_for_status()
+    data = r.json()["data"]
+    products = {p["productSnapshotId"]: p for p in data["productConfigList"]}
+
+    groups = {"n90": {}, "ultra": {}, "gt": {}, "main": {}}
+    rates = set()
+    for it in data["items"]:
+        serial = it.get("serialName") or ""
+        for m in it.get("modelList") or []:
+            model = m.get("modelName") or ""
+            g = _xmi_group(serial, model)
+            for pid in m.get("productIdList") or []:
+                p = products.get(pid)
+                if not p:
+                    continue
+                if p["customerName"] in _XMI_EXCLUDE_NAMES:
+                    continue
+                if p["customerName"] == "年化费率2.5%":
+                    continue
+                groups[g].setdefault(pid, p)
+
+    def descriptor(p):
+        name = p["customerName"]
+        desc = p.get("description") or ""
+        fee_m = re.search(r"年化费率([\d.]+)%", desc)
+        fee = fee_m.group(1) if fee_m else ""
+        terms = [int(x) for x in (p.get("supportedTerms") or [])]
+        if p["productSnapshotId"].startswith("FREE_"):
+            bp = p.get("basicPricing") or []
+            fee = str(round(bp[0]["feeRate"] / 100000, 2)) if bp else "2.28"
+            return f"5年月息年本（年化费率{fee}%）", "free"
+        if name == "限时5免3":
+            return f"{_xmi_down(p)}首付 5免3（后2年1.99%）", "staged"
+        if fee == "0":
+            if 60 in terms:
+                return f"{_xmi_down(p)}首付 5年0息", "zero60"
+            return f"{_xmi_down(p)}首付 3年0息", "zero36"
+        return f"{_xmi_down(p)}首付 1-5年{fee}%", "low"
+
+    lines = []
+    for g in ("n90", "ultra", "gt", "main"):
+        prods = list(groups[g].values())
+        if not prods:
+            continue
+        low, zero_staged = [], []
+        for p in prods:
+            desc, kind = descriptor(p)
+            (low if kind in ("low", "free") else zero_staged).append((desc, kind, p))
+            fee_m = re.search(r"年化费率([\d.]+)%", p.get("description") or "")
+            if fee_m and fee_m.group(1) != "0":
+                rates.add(fee_m.group(1) + "%")
+        parts = []
+        zs = {}
+        for desc, kind, p in zero_staged:
+            zs.setdefault(_xmi_down(p), []).append((kind, desc.split("首付 ", 1)[-1]))
+        zero_parts = []
+        for down, labels in zs.items():
+            labels.sort(key=lambda x: 0 if x[0].startswith("zero") else 1)
+            zero_parts.append(f"{down}首付 {'/'.join(lab for _, lab in labels)}")
+        low_parts = [desc for desc, _, _ in low]
+        if g == "ultra":
+            parts = zero_parts + low_parts
+        else:
+            parts = low_parts + zero_parts
+        lines.append(f"{_XMI_GROUP_PREFIX[g]}：{'、'.join(parts)}")
+
+    summary = {"products": len(products), "rates": sorted(rates)}
+    return lines, summary
+
+
 # ---------------------------------------------------------------- 抓取调度
 def crawl_brand(name, cfg, verbose=False):
     url = cfg["url"]
     js = cfg.get("js", False)
-    text, method, err, zeekr, tesla = None, "", "", None, None
+    text, method, err, zeekr, tesla, xiaomi = None, "", "", None, None, None
     # 极氪：优先直连官方金融接口（签名四接口链），失败再退回静态/headless
     if name == "极氪":
         try:
@@ -1117,6 +1206,18 @@ def crawl_brand(name, cfg, verbose=False):
         except Exception as e:
             err = f"{type(e).__name__}: {e}"
             log(f"  [特斯拉接口失败] {err}", verbose)
+    # 小米：直连试算接口，按车系/车型分组解析在期方案（轻松还、低月供、2.5%等额不进表）
+    if name == "小米":
+        try:
+            xlines, xsum = xiaomi_crawl_api()
+            if xlines:
+                xiaomi = {"lines": xlines, "summary": xsum}
+                text = "\n".join(xlines)
+                method, js = "requests-api", False
+                log(f"  [小米接口] 产品 {xsum['products']} 个，政策行 {len(xlines)}", verbose)
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}"
+            log(f"  [小米接口失败] {err}", verbose)
     if text is None:
         try:
             raw = fetch_static(url)
@@ -1260,6 +1361,12 @@ def main():
             r0 = sec["rows"][0]
             r0["policy"] = res["tesla"]["lines"]
 
+        # 小米直连接口成功：用接口解析行替换政策行（基础对客费率沿用核定基线，贴息费率不覆盖）
+        if res.get("xiaomi"):
+            x = res["xiaomi"]
+            r0 = sec["rows"][0]
+            r0["policy"] = x["lines"]
+
         # 正文过薄（Bot 校验页/空壳页）不算取到
         anchors_hit = [a for a in (cfg.get("anchors") or []) if a in (res.get("text") or "")]
         if res["ok"] and not policy_lines(res.get("text") or "") and name != "鸿蒙智行":
@@ -1347,10 +1454,12 @@ def main():
         fp_new = fingerprint(res["text"])
         if name == "鸿蒙智行":
             hima_rows = parse_hima_rows(res["text"])
-            if hima_rows:
-                for r in sec["rows"]:
-                    if r.get("sub") in hima_rows:
-                        r["policy"] = hima_rows[r["sub"]]
+            for r in sec["rows"]:
+                if r.get("subsidy") == "无":
+                    r["policy"] = ["无贴息政策"]
+                    continue
+                if r.get("sub") in hima_rows:
+                    r["policy"] = hima_rows[r["sub"]]
             res["hima_since"] = hima_activity(res["text"])
         sec.setdefault("fingerprint", {})
         if isinstance(sec["fingerprint"], list):      # 兼容旧版指纹格式
@@ -1407,6 +1516,8 @@ def main():
             for r2 in sc["rows"]:
                 if not r2.get("policy"):
                     continue
+                if r2["policy"] == ["无"]:
+                    continue
                 sm = {}
                 for ln2 in r2["policy"]:
                     if "：" not in ln2:
@@ -1418,8 +1529,10 @@ def main():
                 if sm:
                     r2["since_map"] = sm
                 if fn:
-                    r2["policy"] = fn(r2["policy"])
+                    r2["policy"] = fn(r2["policy"], r2)
                 r2["policy"] = drop_perks(r2["policy"])
+                if sc["brand"] == "比亚迪" and r2.get("sub") == "腾势":
+                    strip_lease_orgs(r2)
     _compact_sec(data)
     if PREV:
         _compact_sec(PREV)
@@ -1442,6 +1555,12 @@ def main():
         status = "checked" if sts and all(s == "checked" for s in sts) else "partial"
         if not sts:
             status = sec["verified"].get("status", "pending")
+        # 零跑：官网为 SPA，文本侧取不到金融方案（权益做在整屏图片/小程序），
+        # 本轮无法从官网抓取，强制标 fail，不得按骨架页文本标成实抓已核对。
+        if sec["brand"] == "零跑":
+            status = "fail"
+            notes = ["零跑官网文本侧无法抓取贷款/贴息/0息/5免2 方案：主包与懒加载 chunk 无金融方案接口，购车权益以整屏图片（PC/screen*.jpg）承载；表内方案为基线沿用，待官网文本接口或小程序可解析后回填"]
+            gaps = ["SPA 单页，静态骨架与 headless 正文均无方案文本，本轮无法抓取，方案为基线沿用，未本周实抓核实"]
         sec["verified"] = {
             "status": status,
             "url": urls[0] if urls else sec["verified"].get("url", ""),
