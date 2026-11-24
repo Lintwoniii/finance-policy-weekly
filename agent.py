@@ -513,6 +513,8 @@ def fingerprint(text):
     for m in re.finditer(r"(20\d{2})[./](\d{1,2})[./](\d{1,2})\s*[–\-—]\s*(20\d{2})?[./]?(\d{1,2})[./](\d{1,2})", text):
         fp.add(f"窗口{m.group(2)}.{m.group(3)}-{m.group(5)}.{m.group(6)}")
     for m in re.finditer(r"(\d{1,2})\.(\d{1,2})\s*[–\-—]\s*(\d{1,2})\.(\d{1,2})", text):
+        if "万" in text[max(0, m.start() - 6):m.end() + 6]:
+            continue  # 首付/尾款金额区间（如 3.99-5.99万）不当作日期窗口
         fp.add(f"窗口{m.group(1)}.{m.group(2)}-{m.group(3)}.{m.group(4)}")
     return sorted(fp)
 
@@ -1030,22 +1032,27 @@ def tesla_crawl_api():
         return "/".join(f"{t}期" for t in terms)
 
     lines = []
+
+    def _down_range(groups):
+        downs = sorted(groups)
+        if len(downs) == 1:
+            return downs[0]
+        lo, hi = downs[0].rstrip("万"), downs[-1].rstrip("万")
+        unit = "万" if downs[0].endswith("万") else ""
+        return f"{lo}-{hi}{unit}"
+
     loan_groups, loan_terms = down_groups(loan0)
     if loan_groups:
         head = "/".join(compact(set().union(*loan_groups.values())))
-        body = "、".join(f"{'/'.join(compact(labels))}首付{down}"
-                         for down, labels in sorted(loan_groups.items()))
-        lines.append(f"{head}：{term_txt(loan_terms)}0息，{body}")
+        lines.append(f"{head}：{_down_range(loan_groups)}首付 5年0息")
 
     bal_groups, bal_terms = down_groups(balloon0)
     if bal_groups:
         residual = next((pl.get("residualPayment") for rec in balloon0 for pl in rec["plans"]
                          if pl.get("residualPayment")), None)
-        res_txt = f"、尾款{residual/10000:g}万" if residual else ""
+        res_txt = f"尾款{residual/10000:g}万" if residual else ""
         head = "/".join(compact(set().union(*bal_groups.values())))
-        body = "、".join(f"{'/'.join(compact(labels))}首付{down}{res_txt}"
-                         for down, labels in sorted(bal_groups.items()))
-        lines.append(f"{head}：{term_txt(bal_terms)}0息，{body}（弹性贷款）")
+        lines.append(f"{head}：{_down_range(bal_groups)}首付 {res_txt}「特从容」5年0息")
 
     std_rates = [x for rec in standard for x in rec["rates"] if x]
     bank_std = [x for rec in standard if rec["ptype"] == "AUTO_LOAN" for x in rec["rates"] if x]
@@ -1358,10 +1365,11 @@ def main():
             note += f"；官网已列车型但方案页无文本：{'、'.join(res['_nop'])}"
         if res.get("tesla"):
             ts = res["tesla"]["summary"]
-            note += (f"；接口共 {ts['products']} 个产品，银行 0 息贷款/弹性贷款已列入政策行；"
-                     f"另有标准贷款/弹性贷款（年化利率 {ts['bank_std_rate']}）、"
-                     f"0息回租 {ts['lease_zero']} 个、低息回租/直租 {ts['lease_low']} 个"
-                     f"（{'、'.join(ts['lease_orgs'])}）未列入政策行；年化费率接口未返回，沿用官网计算器口径")
+            note += (f"；接口共 {ts['products']} 个产品，仅银行 0 息贷款/弹性贷款列入政策行"
+                     f"（回租/直租按本周口径不展示）；标准贷款/弹性贷款年化利率 {ts['bank_std_rate']}，"
+                     f"另有 0息回租 {ts['lease_zero']} 个、低息回租/直租 {ts['lease_low']} 个"
+                     f"（{'、'.join(ts['lease_orgs'])}）；0息贷款接口支持 12-60 期，表内按 5 年（60 期）口径展示；"
+                     f"年化费率接口未返回，沿用官网计算器口径；「特从容」为官网页面别名，接口名限时0息弹性贷款方案")
 
         res_map[name] = {
             "status": status, "url": cfg["url"], "method": res["method"],
