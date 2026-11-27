@@ -1301,6 +1301,74 @@ def save_json(p, obj):
     Path(p).write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+# 由移动端 H5 公开接口直连接管的来源（网页文本侧抓不到/口径旧），接口失败时回退旧网页流程。
+API_DIRECT = ("蔚来", "乐道", "零跑")
+_LEASE_KEYS = ("融租", "租赁", "融担")
+
+
+def _clean_api_row(r):
+    """接口 row 对齐本周口径：删融资租赁政策行、机构列移除融资类公司。rates 已由模块输出为区间。"""
+    r["policy"] = [ln for ln in r.get("policy", []) if not str(ln).startswith("融资租赁")]
+    orgs = []
+    for item in r.get("orgs", []):
+        text, span = item[0], item[1]
+        kept = "、".join(p.strip() for p in text.split("、")
+                         if p.strip() and not any(k in p for k in _LEASE_KEYS))
+        orgs.append([kept, span])
+    r["orgs"] = orgs
+
+
+def apply_h5_api(data, stamp, direct, verbose=False):
+    """用蔚来/乐道（mobile_finance）与零跑（leap_finance）H5 接口实抓结果替换对应 section。
+
+    直接写好 rows / verified(checked) / fingerprint；调用方需把这些来源从旧网页抓取 names 中剔除，
+    旧汇总循环因 srcs 为空会 continue，从而保留本函数写入的 checked 结论。
+    """
+    import mobile_finance
+    import leap_finance
+
+    by_name = {s["brand"]: s for s in data["sections"]}
+
+    if any(d in direct for d in ("蔚来", "乐道")):
+        nio_rows = mobile_finance.fetch_all()
+        for r in nio_rows:
+            _clean_api_row(r)
+        sec = by_name["蔚来"]
+        sec["rows"] = nio_rows
+        sec["verified"] = {
+            "status": "checked",
+            "url": "https://vomtools.nio.com/v2/config-table/financialScheme?wv=do",
+            "checked_at": stamp,
+            "note": "蔚来/乐道 移动端 H5 公开接口实抓（gateway-front-external.nio.com，requests 直连）："
+                    "models 取车型、products 取产品与合作机构、loan-detail 取分段/单值年化；"
+                    "融资租赁类机构与政策按本周口径不展示。",
+            "gap": "",
+        }
+        sec["fingerprint"] = {
+            (r.get("sub") or "蔚来"): [f"费率{x}" for x in r.get("rates", []) if x]
+            for r in nio_rows
+        }
+        log("H5 接口接管：蔚来/乐道", verbose)
+
+    if "零跑" in direct:
+        leap_row = leap_finance.build_row()
+        leap_note = leap_row.pop("_note", "")
+        _clean_api_row(leap_row)
+        sec = by_name["零跑"]
+        sec["rows"] = [leap_row]
+        sec["verified"] = {
+            "status": "checked",
+            "url": "https://cn.leapmotor.com/A10.html",
+            "checked_at": stamp,
+            "note": "零跑 官网公开配置接口实抓（apptec getByCode，requests 直连）。" + leap_note,
+            "gap": "官网仅主推车型披露金融礼，未披露合作机构与精确年化，相关字段留空，未补数。",
+        }
+        sec["fingerprint"] = {
+            "零跑": [f"费率{x}" for x in leap_row.get("rates", []) if x]
+        }
+        log("H5 接口接管：零跑", verbose)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--render-only", action="store_true")
@@ -1345,6 +1413,17 @@ def main():
     res_map = {}   # name -> {status, note, gap, url, method, since, diff}
 
     names = [] if args.render_only else (args.only or list(SOURCES.keys()))
+
+    # 蔚来/乐道/零跑：优先用移动端 H5 公开接口直连；成功则从旧网页抓取名单剔除，失败则回退旧流程。
+    if not args.render_only:
+        direct = [n for n in names if n in API_DIRECT]
+        if direct:
+            try:
+                apply_h5_api(data, stamp, direct, args.verbose)
+                names = [n for n in names if n not in direct]
+            except Exception as exc:  # noqa: BLE001
+                problems.append(f"蔚来/乐道/零跑 H5 接口接管失败，回退网页流程：{type(exc).__name__} {exc}")
+
     for name in names:
         cfg = SOURCES[name]
         sec = by_name.get(SECTION_OF[name])
